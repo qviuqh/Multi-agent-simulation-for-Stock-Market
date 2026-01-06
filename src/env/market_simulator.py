@@ -1,7 +1,10 @@
 import numpy as np
+import logging
+
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-import logging
+from scipy.stats import kurtosis
+from statsmodels.tsa.stattools import acf
 
 @dataclass
 class MarketState:
@@ -209,11 +212,9 @@ class MarketSimulator:
             return {}
         
         # 1. Kurtosis (fat tails)
-        from scipy.stats import kurtosis
         kurt = kurtosis(returns)
         
         # 2. Autocorrelation của returns
-        from statsmodels.tsa.stattools import acf
         acf_returns = acf(returns, nlags=10) if len(returns) > 10 else [1.0]
         
         # 3. Volatility clustering: ACF của squared returns
