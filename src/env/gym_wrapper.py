@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from ..agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
+from market_simulator import MarketSimulator
 
 class TradingEnv(gym.Env):
     """
@@ -54,7 +55,6 @@ class TradingEnv(gym.Env):
             np.random.seed(seed)
         
         # Reset market
-        from market_simulator import MarketSimulator
         self.sim = MarketSimulator(self.market_config)
         self.market_obs = self.sim.reset()
         
@@ -105,8 +105,7 @@ class TradingEnv(gym.Env):
                 self._update_portfolio(execution)
             else:
                 # Update other agents
-                agent = next(a for a in self.other_agents 
-                           if a.agent_id == execution['agent_id'])
+                agent = next(a for a in self.other_agents if a.agent_id == execution['agent_id'])
                 agent.update_portfolio(execution)
         
         # 6. Get new observation

@@ -144,8 +144,7 @@ class MarketSimulator:
         impact = self.impact_coef * np.tanh(normalized_flow)
         return impact
     
-    def _execute_orders(self, orders: List[Dict], mid_price: float, 
-                       spread: float) -> Dict:
+    def _execute_orders(self, orders: List[Dict], mid_price: float, spread: float) -> Dict:
         """
         Tính execution price cho mỗi order
         Buy orders: pay ask = mid + spread/2
