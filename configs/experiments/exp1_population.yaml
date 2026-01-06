@@ -1,0 +1,47 @@
+# configs/experiments/exp1_population.yaml
+# Experiment 1: Population Composition Sweep
+
+experiment_name: "RQ1_Population_Composition"
+
+inherit: base.yaml
+
+override:
+  experiment:
+    n_seeds: 15  # Nhiều seeds hơn cho statistical significance
+    episode_length: 1500
+
+populations:
+  extreme_noise:
+    noise: 20
+    value: 1
+    momentum: 1
+    meanrev: 1
+  
+  pure_fundamental:
+    noise: 3
+    value: 15
+    momentum: 1
+    meanrev: 1
+  
+  pure_technical:
+    noise: 3
+    value: 1
+    momentum: 7
+    meanrev: 7
+  
+  diverse_balanced:
+    noise: 6
+    value: 6
+    momentum: 6
+    meanrev: 6
+
+analysis:
+  focus_metrics:
+    - kurtosis
+    - volatility_clustering
+    - price_efficiency
+  
+  hypotheses:
+    h1: "More noise traders → higher kurtosis"
+    h2: "More value traders → better price discovery"
+    h3: "More momentum traders → volatility clustering"

@@ -1,0 +1,142 @@
+market:
+  initial_price: 100.0
+  base_spread: 0.0002  # 2 basis points
+  impact_coef: 0.001
+  impact_scale: 100.0
+  noise_sigma: 0.0001
+  volatility_decay: 0.94
+  transaction_cost: 0.001  # 10 bps
+
+experiment:
+  episode_length: 1000
+  n_seeds: 10
+  log_interval: 100
+
+# === Agent Configurations ===
+
+agents:
+  noise:
+    trade_prob: 0.3
+    size_mean: 10.0
+    size_std: 3.0
+    initial_cash: 10000.0
+  
+  value:
+    fundamental_value: 100.0
+    reversion_speed: 0.01
+    noise_std: 0.5
+    threshold_pct: 0.02  # 2% band
+    base_size: 10.0
+    initial_cash: 10000.0
+  
+  momentum:
+    short_window: 5
+    long_window: 20
+    base_size: 10.0
+    initial_cash: 10000.0
+  
+  meanrev:
+    window: 20
+    z_threshold: 1.5
+    base_size: 10.0
+    initial_cash: 10000.0
+  
+  rl:
+    initial_cash: 10000.0
+    position_size: 10.0
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    gamma: 0.99
+
+# === Population Compositions ===
+
+populations:
+  noise_heavy:
+    noise: 15
+    value: 2
+    momentum: 2
+    meanrev: 1
+  
+  value_heavy:
+    noise: 5
+    value: 10
+    momentum: 2
+    meanrev: 3
+  
+  momentum_heavy:
+    noise: 5
+    value: 2
+    momentum: 10
+    meanrev: 3
+  
+  balanced:
+    noise: 5
+    value: 5
+    momentum: 5
+    meanrev: 5
+
+# === Experiment Scenarios ===
+
+scenarios:
+  # RQ1: Population composition
+  population_sweep:
+    enabled: true
+    populations: 
+      - noise_heavy
+      - value_heavy
+      - momentum_heavy
+      - balanced
+  
+  # RQ2: Transaction costs
+  cost_sweep:
+    enabled: true
+    transaction_costs: [0.0001, 0.0005, 0.001, 0.002, 0.005]
+    base_population: balanced
+  
+  # RQ3: RL impact
+  rl_impact:
+    enabled: true
+    with_rl: true
+    without_rl: true
+    base_population: balanced
+    rl_training_steps: 100000
+  
+  # RQ4: Regime switching
+  regime_switch:
+    enabled: false
+    volatility_regimes:
+      low: 0.0001
+      medium: 0.0005
+      high: 0.001
+    switch_every: 250  # steps
+
+# === Metrics to Track ===
+
+metrics:
+  market:
+    - kurtosis
+    - volatility_mean
+    - volatility_std
+    - acf_return_lag1
+    - acf_squared_return_lag1
+    - spread_mean
+    - volume_mean
+    - max_drawdown
+    - max_runup
+  
+  agent:
+    - pnl
+    - returns_pct
+    - sharpe
+    - n_trades
+    - turnover
+    - final_inventory
+
+# === Output Settings ===
+
+output:
+  base_dir: ./outputs
+  save_plots: true
+  save_data: true
+  log_level: INFO

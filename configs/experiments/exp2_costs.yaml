@@ -1,0 +1,31 @@
+# configs/experiments/exp2_costs.yaml
+# Experiment 2: Transaction Cost Sensitivity
+
+experiment_name: "RQ2_Transaction_Costs"
+
+inherit: base.yaml
+
+override:
+  experiment:
+    n_seeds: 10
+
+cost_levels:
+  zero: 0.0
+  very_low: 0.0001  # 1 bp
+  low: 0.0005       # 5 bps
+  medium: 0.001     # 10 bps
+  high: 0.002       # 20 bps
+  very_high: 0.005  # 50 bps
+
+base_population: balanced
+
+analysis:
+  focus_metrics:
+    - volume_mean
+    - spread_mean
+    - agent_turnover
+  
+  hypotheses:
+    h1: "Higher costs → lower trading volume"
+    h2: "Higher costs → wider spreads"
+    h3: "Higher costs → more selective trading"

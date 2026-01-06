@@ -1,0 +1,32 @@
+# configs/experiments/exp3_rl_impact.yaml
+# Experiment 3: RL Agent Impact
+
+experiment_name: "RQ3_RL_Agent_Impact"
+
+inherit: base.yaml
+
+override:
+  experiment:
+    n_seeds: 12
+    episode_length: 1000
+
+rl_training:
+  total_timesteps: 100000
+  eval_freq: 5000
+  save_freq: 10000
+
+comparison:
+  baseline: balanced_no_rl
+  treatment: balanced_with_rl
+
+analysis:
+  focus_metrics:
+    - market_efficiency_change
+    - volatility_change
+    - stylized_facts_shift
+    - rl_profitability
+  
+  hypotheses:
+    h1: "RL agent can achieve positive PnL"
+    h2: "RL agent changes market dynamics"
+    h3: "RL adapts to different regimes"
