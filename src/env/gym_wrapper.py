@@ -4,6 +4,7 @@ import numpy as np
 from typing import Dict, List, Tuple
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+from ..agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
 
 class TradingEnv(gym.Env):
     """
@@ -264,8 +265,7 @@ class RLAgentWrapper:
         
         obs = np.concatenate([
             recent_returns,
-            [volatility, spread, volume / 100.0, imbalance / 100.0,
-             inventory_norm, portfolio_return]
+            [volatility, spread, volume / 100.0, imbalance / 100.0, inventory_norm, portfolio_return]
         ]).astype(np.float32)
         
         return obs
@@ -350,7 +350,6 @@ def train_rl_agent(market_config: Dict, other_agents: List,
 
 # === USAGE EXAMPLE ===
 if __name__ == "__main__":
-    from base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
     
     # Market config
     market_config = {

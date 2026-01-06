@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Optional
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import kurtosis
 from statsmodels.tsa.stattools import acf
+from ..env.market_simulator import MarketSimulator
+from ..agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
 
 class ExperimentRunner:
     """
@@ -15,8 +17,7 @@ class ExperimentRunner:
         self.market_config = market_config
         self.results = []
     
-    def run_episode(self, agents: List, n_steps: int = 1000, 
-                   seed: Optional[int] = None) -> Dict:
+    def run_episode(self, agents: List, n_steps: int = 1000, seed: Optional[int] = None) -> Dict:
         """
         Chạy 1 episode với population cho trước
         
@@ -25,9 +26,6 @@ class ExperimentRunner:
         """
         if seed is not None:
             np.random.seed(seed)
-        
-        # Import market simulator (giả sử đã có)
-        from market_simulator import MarketSimulator
         
         sim = MarketSimulator(self.market_config)
         obs = sim.reset()
@@ -69,8 +67,7 @@ class ExperimentRunner:
             'volume_history': sim.volume_history
         }
     
-    def _calculate_metrics(self, sim, agents: List, 
-                          initial_values: Dict) -> Dict:
+    def _calculate_metrics(self, sim, agents: List, initial_values: Dict) -> Dict:
         """Tính toán các metrics đánh giá"""
         
         returns = np.array(sim.return_history[1:])
@@ -186,7 +183,6 @@ class ExperimentRunner:
     
     def _create_agents_from_config(self, config: Dict) -> List:
         """Helper: tạo agents từ config"""
-        from base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
         
         agents = []
         
