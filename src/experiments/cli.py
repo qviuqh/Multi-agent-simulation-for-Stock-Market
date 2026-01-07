@@ -44,9 +44,7 @@ def _save_results(df: pd.DataFrame, output_dir: Path, filename: str, save_data: 
 
 
 def _parse_seed_values(seed: Optional[int], n_seeds: int) -> Iterable[int]:
-    if seed is not None:
-        return [seed]
-    return range(n_seeds)
+    return [seed] if seed is not None else range(n_seeds)
 
 
 def run_population_sweep(

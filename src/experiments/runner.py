@@ -1,17 +1,22 @@
+"""
+Experiment Runner with Unified Metrics
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Optional, Iterable
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.stats import kurtosis
-from statsmodels.tsa.stattools import acf
-from ..env.market_simulator import MarketSimulator
-from ..agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
-from ..agents.rl_agent import RLAgent
+import sys
+sys.path.append('src')
+
+from env.market_simulator import MarketSimulator
+from agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
+from agents.rl_agent import RLAgent
+from metrics.stylized_facts import calculate_stylized_facts, calculate_market_efficiency
+from metrics.performance import calculate_agent_performance
+
 
 class ExperimentRunner:
     """
-    Chạy thí nghiệm và thu thập metrics
+    Unified experiment runner using consistent metrics
     """
     
     def __init__(self, market_config: Dict, agent_configs: Optional[Dict] = None):
@@ -20,11 +25,12 @@ class ExperimentRunner:
         self.results = []
     
     def run_episode(self, agents: List, n_steps: int = 1000, seed: Optional[int] = None) -> Dict:
+        # sourcery skip: for-index-underscore
         """
-        Chạy 1 episode với population cho trước
+        Run one episode with given population
         
         Returns:
-            Dict chứa metrics và history
+            Dict containing metrics and history
         """
         if seed is not None:
             np.random.seed(seed)
@@ -32,7 +38,7 @@ class ExperimentRunner:
         sim = MarketSimulator(self.market_config)
         obs = sim.reset()
         
-        # Initial values cho performance tracking
+        # Track initial values for performance calculation
         initial_values = {
             agent.agent_id: agent.get_portfolio_value(sim.state.mid_price)
             for agent in agents
@@ -40,7 +46,7 @@ class ExperimentRunner:
         
         # Episode loop
         for step in range(n_steps):
-            # Thu thập orders từ tất cả agents
+            # Collect orders from all agents
             orders = []
             for agent in agents:
                 decision = agent.decide(obs)
@@ -50,7 +56,7 @@ class ExperimentRunner:
             # Market step
             new_state, exec_info = sim.step(orders)
             
-            # Update agents' portfolios
+            # Update agent portfolios
             for execution in exec_info['executions']:
                 agent_id = execution['agent_id']
                 agent = next(a for a in agents if a.agent_id == agent_id)
@@ -59,7 +65,7 @@ class ExperimentRunner:
             # Get new observation
             obs = sim.get_observation()
         
-        # Tính metrics
+        # Calculate metrics using unified metrics module
         metrics = self._calculate_metrics(sim, agents, initial_values)
         
         return {
@@ -70,80 +76,39 @@ class ExperimentRunner:
         }
     
     def _calculate_metrics(self, sim, agents: List, initial_values: Dict) -> Dict:
-        """Tính toán các metrics đánh giá"""
-        
+        # sourcery skip: use-named-expression
+        """
+        Calculate all metrics using unified metrics module
+        """
         returns = np.array(sim.return_history[1:])
         prices = np.array(sim.price_history)
         
-        # === Market Metrics ===
-        market_metrics = {
-            # Fat tails
-            'kurtosis': kurtosis(returns),
-            
-            # Volatility
-            'volatility_mean': np.std(returns),
-            'volatility_std': np.std([np.std(returns[i:i+20]) 
-                                     for i in range(0, len(returns)-20, 20)]),
-            
-            # Autocorrelation
-            'acf_return_lag1': acf(returns, nlags=1)[1] if len(returns) > 10 else 0,
-            'acf_abs_return_lag1': acf(np.abs(returns), nlags=1)[1] if len(returns) > 10 else 0,
-            'acf_squared_return_lag1': acf(returns**2, nlags=1)[1] if len(returns) > 10 else 0,
-            
-            # Spread & liquidity
-            'spread_mean': np.mean([s.spread for s in [sim.state]]),  # Simplified
-            'volume_mean': np.mean(sim.volume_history),
-            
-            # Crashes/bubbles
-            'max_drawdown': self._max_drawdown(prices),
-            'max_runup': self._max_runup(prices),
-        }
+        # === Market Metrics (from metrics.stylized_facts) ===
+        market_facts = calculate_stylized_facts(returns, prices)
         
-        # === Agent Performance ===
+        # Add volume and spread
+        market_facts['volume_mean'] = np.mean(sim.volume_history)
+        market_facts['spread_mean'] = sim.state.spread  # Last spread
+        
+        # Market efficiency metrics
+        fundamental_value = self.market_config.get('fundamental_value', None)
+        if fundamental_value:
+            efficiency_metrics = calculate_market_efficiency(prices, fundamental_value)
+            market_facts.update(efficiency_metrics)
+        
+        # === Agent Performance (from metrics.performance) ===
         agent_metrics = {}
         current_price = sim.state.mid_price
         
         for agent in agents:
-            final_value = agent.get_portfolio_value(current_price)
             initial_value = initial_values[agent.agent_id]
-            pnl = final_value - initial_value
-            returns_pct = pnl / initial_value
-            
-            # Sharpe (simplified)
-            if len(agent.trades) > 0:
-                trade_returns = [
-                    (t.get('revenue', 0) - t.get('cost', 0)) / initial_value 
-                    for t in agent.trades
-                ]
-                sharpe = np.mean(trade_returns) / (np.std(trade_returns) + 1e-8) if trade_returns else 0
-            else:
-                sharpe = 0
-            
-            agent_metrics[agent.agent_id] = {
-                'pnl': pnl,
-                'returns_pct': returns_pct,
-                'sharpe': sharpe,
-                'n_trades': len(agent.trades),
-                'final_inventory': agent.inventory,
-                'final_cash': agent.cash
-            }
+            perf = calculate_agent_performance(agent, current_price, initial_value)
+            agent_metrics[agent.agent_id] = perf
         
         return {
-            'market': market_metrics,
+            'market': market_facts,
             'agents': agent_metrics
         }
-    
-    def _max_drawdown(self, prices: np.ndarray) -> float:
-        """Tính max drawdown"""
-        cummax = np.maximum.accumulate(prices)
-        drawdown = (prices - cummax) / cummax
-        return np.min(drawdown)
-    
-    def _max_runup(self, prices: np.ndarray) -> float:
-        """Tính max run-up"""
-        cummin = np.minimum.accumulate(prices)
-        runup = (prices - cummin) / cummin
-        return np.max(runup)
     
     def run_population_sweep(
         self,
@@ -153,24 +118,28 @@ class ExperimentRunner:
         seeds: Optional[Iterable[int]] = None,
     ) -> pd.DataFrame:
         """
-        Thí nghiệm RQ1: Sweep population compositions
+        Experiment: Sweep over population compositions
         
         Args:
-            population_configs: List of dicts như:
+            population_configs: List of population configs like:
                 {
                     'name': 'noise_heavy',
                     'noise': 10,
                     'value': 2,
                     'momentum': 2,
-                    'meanrev': 1
+                    'meanrev': 1,
+                    'rl': 0  # optional
                 }
         """
         results = []
         seed_values = list(seeds) if seeds is not None else list(range(n_seeds))
+        
         for config in population_configs:
             print(f"\nRunning {config['name']}...")
             
             for seed in seed_values:
+                print(f"  Seed {seed}...", end=' ')
+                
                 # Create agents
                 agents = self._create_agents_from_config(config)
                 
@@ -185,126 +154,48 @@ class ExperimentRunner:
                     **result['metrics']['market']  # Market metrics
                 }
                 results.append(row)
+                
+                print(f"✓ Kurt={result['metrics']['market'].get('kurtosis', 0):.2f}")
         
         return pd.DataFrame(results)
     
     def _create_agents_from_config(self, config: Dict) -> List:
-        """Helper: tạo agents từ config"""
-        
+        """Create agents from population config"""
         agents = []
         agent_configs = self.agent_configs
         
         # Noise traders
         for i in range(config.get('noise', 0)):
             noise_config = dict(agent_configs.get('noise', {}))
-            agents.append(NoiseTrader(
-                f'noise_{i}',
-                noise_config
-            ))
+            agents.append(NoiseTrader(f'noise_{i}', noise_config))
         
         # Value traders
         for i in range(config.get('value', 0)):
             value_config = dict(agent_configs.get('value', {}))
-            agents.append(ValueTrader(
-                f'value_{i}',
-                value_config
-            ))
+            # Add diversity to fundamental values
+            value_config['fundamental_value'] = (
+                value_config.get('fundamental_value', 100.0) + 
+                np.random.uniform(-2, 2)
+            )
+            agents.append(ValueTrader(f'value_{i}', value_config))
         
         # Momentum traders
         for i in range(config.get('momentum', 0)):
             momentum_config = dict(agent_configs.get('momentum', {}))
-            agents.append(MomentumTrader(
-                f'momentum_{i}',
-                momentum_config
-            ))
+            agents.append(MomentumTrader(f'momentum_{i}', momentum_config))
         
         # Mean reversion traders
         for i in range(config.get('meanrev', 0)):
             meanrev_config = dict(agent_configs.get('meanrev', {}))
-            agents.append(MeanReversionTrader(
-                f'meanrev_{i}',
-                meanrev_config
-            ))
-
-        # RL traders
+            agents.append(MeanReversionTrader(f'meanrev_{i}', meanrev_config))
+        
+        # RL traders (if specified)
         for i in range(config.get('rl', 0)):
             rl_config = dict(agent_configs.get('rl', {}))
             model_path = rl_config.pop('model_path', None)
-            agents.append(RLAgent(
-                f'rl_{i}',
-                rl_config,
-                model_path=model_path
-            ))
+            agents.append(RLAgent(f'rl_{i}', rl_config, model_path=model_path))
         
         return agents
-
-
-# === VISUALIZATION HELPERS ===
-
-def plot_population_comparison(df: pd.DataFrame):
-    """
-    Vẽ biểu đồ so sánh metrics giữa các population
-    """
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    
-    metrics = ['kurtosis', 'volatility_mean', 'acf_squared_return_lag1',
-               'max_drawdown', 'volume_mean', 'spread_mean']
-    
-    for idx, metric in enumerate(metrics):
-        ax = axes[idx // 3, idx % 3]
-        
-        # Box plot
-        df.boxplot(column=metric, by='config_name', ax=ax)
-        ax.set_title(metric)
-        ax.set_xlabel('')
-        plt.sca(ax)
-        plt.xticks(rotation=45)
-    
-    plt.tight_layout()
-    return fig
-
-
-def plot_stylized_facts(price_history: List[float], return_history: List[float]):
-    """
-    Vẽ stylized facts của 1 simulation
-    """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    
-    returns = np.array(return_history[1:])
-    
-    # 1. Price path
-    axes[0, 0].plot(price_history)
-    axes[0, 0].set_title('Price Path')
-    axes[0, 0].set_xlabel('Time')
-    axes[0, 0].set_ylabel('Price')
-    
-    # 2. Return distribution
-    axes[0, 1].hist(returns, bins=50, density=True, alpha=0.7)
-    # Overlay normal
-    mu, sigma = returns.mean(), returns.std()
-    x = np.linspace(returns.min(), returns.max(), 100)
-    axes[0, 1].plot(x, 1/(sigma * np.sqrt(2 * np.pi)) * 
-                   np.exp( - (x - mu)**2 / (2 * sigma**2) ),
-                   'r-', label='Normal')
-    axes[0, 1].set_title(f'Return Distribution (Kurt={kurtosis(returns):.2f})')
-    axes[0, 1].legend()
-    
-    # 3. ACF of returns
-    acf_vals = acf(returns, nlags=20)
-    axes[1, 0].bar(range(len(acf_vals)), acf_vals)
-    axes[1, 0].axhline(y=0, color='k', linestyle='--')
-    axes[1, 0].set_title('ACF of Returns')
-    axes[1, 0].set_xlabel('Lag')
-    
-    # 4. ACF of squared returns (volatility clustering)
-    acf_sq = acf(returns**2, nlags=20)
-    axes[1, 1].bar(range(len(acf_sq)), acf_sq)
-    axes[1, 1].axhline(y=0, color='k', linestyle='--')
-    axes[1, 1].set_title('ACF of Squared Returns (Vol Clustering)')
-    axes[1, 1].set_xlabel('Lag')
-    
-    plt.tight_layout()
-    return fig
 
 
 # === USAGE EXAMPLE ===
@@ -315,29 +206,36 @@ if __name__ == "__main__":
         'base_spread': 0.0002,
         'impact_coef': 0.001,
         'noise_sigma': 0.0001,
-        'transaction_cost': 0.001
+        'transaction_cost': 0.001,
+        'fundamental_value': 100.0  # For efficiency metrics
     }
     
-    # Population configs để sweep
+    # Agent configs
+    agent_configs = {
+        'noise': {'trade_prob': 0.3, 'size_mean': 10, 'size_std': 3},
+        'value': {'fundamental_value': 100, 'threshold_pct': 0.02, 'base_size': 10},
+        'momentum': {'short_window': 5, 'long_window': 20, 'base_size': 10},
+        'meanrev': {'window': 20, 'z_threshold': 1.5, 'base_size': 10}
+    }
+    
+    # Population configs
     population_configs = [
         {'name': 'noise_heavy', 'noise': 15, 'value': 2, 'momentum': 2, 'meanrev': 1},
-        {'name': 'value_heavy', 'noise': 5, 'value': 10, 'momentum': 2, 'meanrev': 3},
-        {'name': 'momentum_heavy', 'noise': 5, 'value': 2, 'momentum': 10, 'meanrev': 3},
         {'name': 'balanced', 'noise': 5, 'value': 5, 'momentum': 5, 'meanrev': 5}
     ]
     
-    # Run sweep
-    runner = ExperimentRunner(market_config)
+    # Run experiment
+    runner = ExperimentRunner(market_config, agent_configs)
     results_df = runner.run_population_sweep(
         population_configs, 
-        n_seeds=5,  # 5 seeds cho demo nhanh
+        n_seeds=3,
         n_steps=500
     )
     
-    # Analyze
-    print(results_df.groupby('config_name')['kurtosis'].describe())
-    
-    # Plot
-    fig = plot_population_comparison(results_df)
-    plt.savefig('population_comparison.png', dpi=150)
-    plt.show()
+    # Display results
+    print("\n" + "="*70)
+    print("RESULTS")
+    print("="*70)
+    print(results_df.groupby('config_name')[
+        ['kurtosis', 'volatility_mean', 'acf_squared_lag1']
+    ].mean().round(4))

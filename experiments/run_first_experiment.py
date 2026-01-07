@@ -1,8 +1,5 @@
 """
 First complete experiment: Population Composition (RQ1)
-Chạy: python experiments/run_first_experiment.py
-
-This will take ~5-10 minutes depending on your machine
 """
 
 import sys
@@ -29,6 +26,7 @@ class SimpleExperimentRunner:
         self.market_config = market_config
     
     def create_population(self, pop_config):
+        # sourcery skip: for-append-to-extend, list-comprehension
         """Create agents based on population config"""
         agents = []
         
@@ -65,6 +63,7 @@ class SimpleExperimentRunner:
         return agents
     
     def run_episode(self, agents, n_steps=500, seed=None):
+        # sourcery skip: for-index-underscore
         """Run one episode"""
         if seed is not None:
             np.random.seed(seed)
@@ -173,8 +172,8 @@ def run_experiment():
               f"{config['momentum']}M, {config['meanrev']}R)")
     
     print(f"\nSettings:")
-    print(f"  - Episode length: 500 steps")
-    print(f"  - Seeds per scenario: 5")
+    print("  - Episode length: 500 steps")
+    print("  - Seeds per scenario: 5")
     print(f"  - Total simulations: {len(populations) * 5}")
     print(f"\nEstimated time: 3-5 minutes\n")
     
@@ -244,7 +243,7 @@ def analyze_results(df):
     
     # Which population has highest kurtosis?
     kurt_by_pop = df.groupby('population')['kurtosis'].mean().sort_values(ascending=False)
-    print(f"   Fat Tails (Kurtosis):")
+    print("   Fat Tails (Kurtosis):")
     for pop, kurt in kurt_by_pop.items():
         print(f"      {pop:20s}: {kurt:.2f}")
     
@@ -320,13 +319,13 @@ def analyze_results(df):
     groups = [df[df['population'] == pop]['kurtosis'].values 
               for pop in df['population'].unique()]
     f_stat, p_value = f_oneway(*groups)
-    print(f"   ANOVA test for Kurtosis:")
+    print("   ANOVA test for Kurtosis:")
     print(f"      F-statistic: {f_stat:.4f}")
     print(f"      p-value: {p_value:.6f}")
     if p_value < 0.05:
-        print(f"      ✅ Populations have significantly different kurtosis (p < 0.05)")
+        print("      ✅ Populations have significantly different kurtosis (p < 0.05)")
     else:
-        print(f"      ⚠️  No significant difference (p >= 0.05)")
+        print("      ⚠️  No significant difference (p >= 0.05)")
     
     plt.close()
 
