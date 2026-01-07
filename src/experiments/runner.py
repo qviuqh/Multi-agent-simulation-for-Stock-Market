@@ -1,20 +1,22 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Iterable
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import kurtosis
 from statsmodels.tsa.stattools import acf
 from ..env.market_simulator import MarketSimulator
 from ..agents.base_agent import NoiseTrader, ValueTrader, MomentumTrader, MeanReversionTrader
+from ..agents.rl_agent import RLAgent
 
 class ExperimentRunner:
     """
     Chạy thí nghiệm và thu thập metrics
     """
     
-    def __init__(self, market_config: Dict):
+    def __init__(self, market_config: Dict, agent_configs: Optional[Dict] = None):
         self.market_config = market_config
+        self.agent_configs = agent_configs or {}
         self.results = []
     
     def run_episode(self, agents: List, n_steps: int = 1000, seed: Optional[int] = None) -> Dict:
@@ -143,8 +145,13 @@ class ExperimentRunner:
         runup = (prices - cummin) / cummin
         return np.max(runup)
     
-    def run_population_sweep(self, population_configs: List[Dict], 
-                            n_seeds: int = 10, n_steps: int = 1000) -> pd.DataFrame:
+    def run_population_sweep(
+        self,
+        population_configs: List[Dict],
+        n_seeds: int = 10,
+        n_steps: int = 1000,
+        seeds: Optional[Iterable[int]] = None,
+    ) -> pd.DataFrame:
         """
         Thí nghiệm RQ1: Sweep population compositions
         
@@ -159,11 +166,11 @@ class ExperimentRunner:
                 }
         """
         results = []
-        
+        seed_values = list(seeds) if seeds is not None else list(range(n_seeds))
         for config in population_configs:
             print(f"\nRunning {config['name']}...")
             
-            for seed in range(n_seeds):
+            for seed in seed_values:
                 # Create agents
                 agents = self._create_agents_from_config(config)
                 
@@ -185,33 +192,48 @@ class ExperimentRunner:
         """Helper: tạo agents từ config"""
         
         agents = []
+        agent_configs = self.agent_configs
         
         # Noise traders
         for i in range(config.get('noise', 0)):
+            noise_config = dict(agent_configs.get('noise', {}))
             agents.append(NoiseTrader(
                 f'noise_{i}',
-                {'trade_prob': 0.3, 'size_mean': 10}
+                noise_config
             ))
         
         # Value traders
         for i in range(config.get('value', 0)):
+            value_config = dict(agent_configs.get('value', {}))
             agents.append(ValueTrader(
                 f'value_{i}',
-                {'fundamental_value': 100, 'threshold_pct': 0.02}
+                value_config
             ))
         
         # Momentum traders
         for i in range(config.get('momentum', 0)):
+            momentum_config = dict(agent_configs.get('momentum', {}))
             agents.append(MomentumTrader(
                 f'momentum_{i}',
-                {'short_window': 5, 'long_window': 20}
+                momentum_config
             ))
         
         # Mean reversion traders
         for i in range(config.get('meanrev', 0)):
+            meanrev_config = dict(agent_configs.get('meanrev', {}))
             agents.append(MeanReversionTrader(
                 f'meanrev_{i}',
-                {'window': 20, 'z_threshold': 1.5}
+                meanrev_config
+            ))
+
+        # RL traders
+        for i in range(config.get('rl', 0)):
+            rl_config = dict(agent_configs.get('rl', {}))
+            model_path = rl_config.pop('model_path', None)
+            agents.append(RLAgent(
+                f'rl_{i}',
+                rl_config,
+                model_path=model_path
             ))
         
         return agents
